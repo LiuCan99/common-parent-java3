@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+	<!--引入公共内容-->
+	<span th:replace="/pages/common :: css('运单快速录入')"></span>
+	<span th:replace="/pages/common :: js"></span>
+
+	<script type="text/javascript">
+
+        var editIndex;
+        function doAdd(){
+            //在第一行插入一个新行，如果已经填写内容，再次查询，需结束之前的编辑（同时只能编辑一行）
+
+            //不是undefined，表示有编辑行
+            if(editIndex != undefined){
+                //当前行结束编辑时，将触发 onAfterEdit() 函数，内部将 editIndex 重置成 undefined
+                $("#grid").datagrid("endEdit",editIndex);
+            }
+            //是 undefined ，表示没有编辑行
+            if(editIndex == undefined){
+                //记录编辑行
+                editIndex = 0;
+                //插入新行
+                $("#grid").datagrid("insertRow",{
+                    index : editIndex,
+                    row : {}
+                });
+                //开始编辑
+                $("#grid").datagrid("beginEdit",editIndex);
+            }
+        }
+
+        function doCancel(){
+            if(editIndex != undefined){
+                //将触发 onCancelEdit 函数
+                $("#grid").datagrid("cancelEdit",editIndex);
+            }
+        }
+
+        function doSave(){
+            // 将触发 onAfterEdit 函数
+            $("#grid").datagrid("endEdit",editIndex);
+        }
+
+
+
+        // 1 准备数据
+        var columns = [ [
+            {field : 'wayBillNum',title : '运单号', width : 120 ,
+                editor : {
+                    type : 'validatebox',
+                    options : {
+                        required : true
+                    }
+                }
+            },
+            {field : 'arriveCity',title : '到达地', width : 120,
+                editor : {
+                    type : 'validatebox',
+                    options : {
+                        required : true
+                    }
+                }
+            },
+            {field : 'goodsType',title : '货物类型', width : 120,
+                editor : {
+                    type : 'validatebox',
+                    options : {
+                        required : true
+                    }
+                }
+            },
+            {field : 'num',title : '件数', width : 120,
+                editor : {
+                    type : 'numberbox',
+                    options : {
+                        required : true
+                    }
+                }
+            },
+            {field : 'weight',title : '重量', width : 120,
+                editor : {
+                    type : 'validatebox',
+                    options : {
+                        required : true
+                    }
+                }
+            },
+            {field : 'floadreqr',title : '配载要求', width : 120,
+                editor:{
+                    type : 'validatebox',
+                    options : {
+                        required : true
+                    }
+                }
+            }
+        ] ];
+        var toolbar = [
+            {
+                id : 'button-add',
+                text : '新增一行',
+                iconCls : 'icon-edit',
+                handler : doAdd
+            },
+            {
+                id : 'button-cancel',
+                text : '取消编辑',
+                iconCls : 'icon-cancel',
+                handler : doCancel
+            },
+            {
+                id : 'button-save',
+                text : '保存',
+                iconCls : 'icon-save',
+                handler : doSave
+            }
+        ];
+
+        $(function(){
+            // 先将body隐藏，再显示，不会出现页面刷新效果
+            $("body").css({visibility:"visible"});
+
+
+            // 2 参数
+            var options = {
+                url : "/wayBill/pageQuickQuery",
+                method : "get",
+                columns : columns,
+                toolbar : toolbar,
+                rownumbers : true,
+                striped : true,
+                pagination : true,
+                fit : true,					//自适应
+                onAfterEdit : function(rowIndex, rowData, changes){		//编辑后出发的函数
+                    editIndex = undefined;
+                    console.info(rowData)
+
+                    //添加==发送ajax保存
+                    if(editIndex == 0) {
+                        $.ajax({
+                            "url" : "/wayBill" ,
+                            "type" : "post" ,
+                            "data" :  rowData ,
+                            "statusCode" : {
+                                200:function(data){
+                                    $.messager.show({
+                                        title:'提示',
+                                        msg:data,
+                                    });
+
+                                },
+                                500:function(data){
+                                    $.messager.show({
+                                        title:'提示',
+                                        msg:data.responseText,
+                                    });
+                                    //在编辑
+                                    $("#grid").datagrid("beginEdit",rowIndex);
+                                    editIndex = rowIndex;
+                                },
+                            } ,
+                        });
+                    } else {
+                        //编辑--此处存在无效数据：order、recArea、sendArea
+                        var newData = rowData;
+                        // json对象属性删除操作
+                        delete newData.order;
+                        delete newData.recArea;
+                        delete newData.sendArea;
+                        console.info(newData);
+                        $.ajax({
+                            "url": "/wayBill",
+                            "type": "put",
+                            "data" :  rowData ,
+                            "statusCode" : {
+                                200:function(data){
+                                    $.messager.show({
+                                        title:'提示',
+                                        msg:data,
+                                    });
+
+                                },
+                                500:function(data){
+                                    $.messager.show({
+                                        title:'提示',
+                                        msg:data.responseText,
+                                    });
+                                    //在编辑
+                                    $("#grid").datagrid("beginEdit",rowIndex);
+                                    editIndex = rowIndex;
+                                },
+                            } ,
+                        });
+                    }
+
+                },
+                onCancelEdit : function(rowIndex, rowData){
+                    //当前编辑行如果没有id，表示新添加行，将删除该行
+                    if($("#grid").datagrid("getRows")[rowIndex].id == undefined){
+                        $("#grid").datagrid("deleteRow", rowIndex);
+                    }
+                    editIndex = undefined;	//编辑行已经取消，当前没有编辑行
+                },
+                onDblClickRow :function( rowIndex, rowData ){
+                    if(editIndex == undefined){
+                        $("#grid").datagrid("beginEdit",rowIndex);
+                        editIndex = rowIndex;	//记录当前行在编辑
+                    }
+                }
+            };
+            // 3 绘制
+            $("#grid").datagrid(options);
+        });
+
+
+
+		/*
+		 var editIndex ;
+
+		 function doAdd(){
+		 if(editIndex != undefined){
+		 $("#grid").datagrid('endEdit',editIndex);
+		 //return;
+		 }
+		 if(editIndex==undefined){
+		 //alert("快速添加电子单...");
+		 $("#grid").datagrid('insertRow',{
+		 index : 0,
+		 row : {}
+		 });
+		 $("#grid").datagrid('beginEdit',0);
+		 editIndex = 0;
+		 }
+		 }
+
+		 function doSave(){
+		 $("#grid").datagrid('endEdit',editIndex );
+		 }
+
+		 function doCancel(){
+		 if(editIndex!=undefined){
+		 $("#grid").datagrid('cancelEdit',editIndex);
+		 if($('#grid').datagrid('getRows')[editIndex].id == undefined){
+		 $("#grid").datagrid('deleteRow',editIndex);
+		 }
+		 editIndex = undefined;
+		 }
+		 }
+
+		 //工具栏
+		 var toolbar = [ {
+		 id : 'button-add',
+		 text : '新增一行',
+		 iconCls : 'icon-edit',
+		 handler : doAdd
+		 }, {
+		 id : 'button-cancel',
+		 text : '取消编辑',
+		 iconCls : 'icon-cancel',
+		 handler : doCancel
+		 }, {
+		 id : 'button-save',
+		 text : '保存',
+		 iconCls : 'icon-save',
+		 handler : doSave
+		 }];
+		 // 定义列
+		 var columns = [ [ {
+		 field : 'wayBillNum',
+		 title : '运单号',
+		 width : 120,
+		 align : 'center',
+		 editor :{
+		 type : 'validatebox',
+		 options : {
+		 required: true
+		 }
+		 }
+		 }, {
+		 field : 'arriveCity',
+		 title : '到达地',
+		 width : 120,
+		 align : 'center',
+		 editor :{
+		 type : 'validatebox',
+		 options : {
+		 required: true
+		 }
+		 }
+		 },{
+		 field : 'goodsType',
+		 title : '货物类型',
+		 width : 120,
+		 align : 'center',
+		 editor :{
+		 type : 'validatebox',
+		 options : {
+		 required: true
+		 }
+		 }
+		 }, {
+		 field : 'num',
+		 title : '件数',
+		 width : 120,
+		 align : 'center',
+		 editor :{
+		 type : 'numberbox',
+		 options : {
+		 required: true
+		 }
+		 }
+		 }, {
+		 field : 'weight',
+		 title : '重量',
+		 width : 120,
+		 align : 'center',
+		 editor :{
+		 type : 'validatebox',
+		 options : {
+		 required: true
+		 }
+		 }
+		 }, {
+		 field : 'floadreqr',
+		 title : '配载要求',
+		 width : 220,
+		 align : 'center',
+		 editor :{
+		 type : 'validatebox',
+		 options : {
+		 required: true
+		 }
+		 }
+		 }] ];
+
+		 $(function(){
+		 // 先将body隐藏，再显示，不会出现页面刷新效果
+		 $("body").css({visibility:"visible"});
+
+		 // 运单数据表格
+		 $('#grid').datagrid( {
+		 iconCls : 'icon-forward',
+		 fit : true,
+		 border : true,
+		 rownumbers : true,
+		 striped : true,
+		 pageList: [30,50,100],
+		 pagination : true,
+		 toolbar : toolbar,
+		 url : "/wayBill/pageQuery.html",
+		 method : "get",
+		 idField : 'id',
+		 columns : columns,
+		 onDblClickRow : doDblClickRow,
+		 onAfterEdit : function(rowIndex, rowData, changes){
+		 // 将新添加运单数据 保存到 数据表中
+		 $.ajax({
+		 type: "POST",
+		 url: "/wayBill/save.html",
+		 data: rowData,
+		 statusCode : {
+		 200: function(){
+		 // 保存成功
+		 //$.messager.alert("提示信息","运单录入成功");
+		 $.messager.show({
+		 title:'提示',
+		 msg:'运单录入成功',
+		 timeout:1000,
+		 showType:'slide'
+		 });
+
+		 // 刷新列表
+		 //$("#grid").datagrid('reload');
+		 }
+		 }
+		 });
+
+		 console.info(rowData);
+		 editIndex = undefined;
+		 },
+		 onCancelEdit : function(rowIndex, rowData){
+		 editIndex = undefined;
+		 }
+
+		 });
+		 });
+
+		 function doDblClickRow(rowIndex, rowData){
+		 alert("双击表格数据...");
+		 console.info(rowIndex);
+		 $('#grid').datagrid('beginEdit',rowIndex);
+		 editIndex = rowIndex;
+		 }
+		 */
+	</script>
+</head>
+
+<body class="easyui-layout" style="visibility:hidden;">
+<div region="center" border="false">
+	<table id="grid"></table>
+</div>
+</body>
+
+</html> 
